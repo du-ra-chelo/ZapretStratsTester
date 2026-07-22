@@ -2,6 +2,7 @@
 package osutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,9 +46,21 @@ func IsServiceActive(service string) (bool, error) {
 func IsFileExist(filename, solution string) error {
 	_, err := os.Stat(filename)
 	if err != nil {
+		msg := fmt.Sprintf("%v не существует или имеет ограниченные права доступа", filename)
 		if os.IsNotExist(err) {
-			err = fmt.Errorf("%v не существует или имеет ограниченные права доступа, %s", filename, solution)
+			if solution != "" {
+				msg += "," + solution
+			}
+			err = errors.New(msg)
 		}
 	}
+	return err
+}
+
+// Программы & утилиты
+
+// IsInstalled проверяет наличие программы в $PATH
+func IsInstalled(name string) error {
+	_, err := exec.LookPath(name)
 	return err
 }
