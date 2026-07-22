@@ -48,7 +48,7 @@ func CheckIP(ip string, timeout int, retries int, retryDelayMs int) Domain {
 		// Сразу через системный ping
 		result.Ping = systemPing(ctx, ip, timeoutDur).value
 
-		if IsIPAvailable(result) {
+		if IsAvailable(result.Domain, result.Ping, "N/A", "N/A", "N/A") {
 			result.IsAvailable = true
 			return result
 		}

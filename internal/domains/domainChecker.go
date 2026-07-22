@@ -113,7 +113,7 @@ func checkDomainOnce(domain string, timeout int) Domain {
 	result.HTTP = http
 	result.TLS12 = tls12
 	result.TLS13 = tls13
-	result.IsAvailable = IsDomenAvailable(domain, ping, tls12, tls13)
+	result.IsAvailable = IsAvailable(domain, ping, http, tls12, tls13)
 
 	return result
 }
