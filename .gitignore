@@ -1,0 +1,62 @@
+# Скомпилированные бинарники
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/bins/
+/dist/
+
+# Результаты тестов
+*.test
+*.out
+coverage.txt
+coverage.html
+*.prof
+
+# Зависимости (если используется vendoring)
+vendor/
+
+# Go workspace (go.work)
+go.work
+go.work.sum
+
+# Системные файлы macOS
+.DS_Store
+.DS_Store?
+._*
+
+# Системные файлы Windows
+Thumbs.db
+Desktop.ini
+
+# Временные файлы редакторов
+*.swp
+*.swo
+*~
+.bak
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Переменные окружения и конфиги
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Файлы конфигурации с секретами
+*.key
+*.pem
+credentials.json
+
+# Логи
+*.log
+
+# Временные файлы
+tmp/
+temp/
+.cache/
