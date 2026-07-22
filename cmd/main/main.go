@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 
 	"ZapretStratsTester/internal/osutil"
 )
@@ -17,7 +16,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Ошибка: требуется запуск с правами root")
 		os.Exit(1)
 	}
-	// Наличие зависимостей: zapret, tester, nftables|iptables TODO
+	// Наличие зависимостей: zapret, tester, nftables|iptables
 	if err := checkDeps(); err != nil {
 		log.Fatal(err)
 	}
@@ -49,9 +48,8 @@ func checkDeps() error {
 
 	// Проверяем наличие firewall
 	// По дефолту nftables
-	// TODO поддержка iptables и чтение используемого файервола из конфига zapret
-	cmd := exec.Command("nft", "--version")
-	if err := cmd.Run(); err != nil {
+	// TODO: поддержка iptables и чтение используемого файервола из конфига zapret
+	if err := osutil.IsInstalled("nft"); err != nil {
 		return fmt.Errorf("не удалось запустить nftables: %w", err)
 	}
 	return nil

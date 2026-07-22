@@ -1,6 +1,8 @@
 // Package output выводит результаты проверки в виде форматированной таблицы со статистикой.
 package output
 
+// TODO: улучшеный output
+
 import (
 	"fmt"
 	"strings"

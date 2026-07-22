@@ -19,7 +19,6 @@ import (
 	"syscall"
 
 	"ZapretStratsTester/internal/domains"
-	// TODO output
 	"ZapretStratsTester/internal/output"
 )
 
@@ -138,7 +137,7 @@ func init() {
 		*threads = workers
 
 	} else {
-		fmt.Fprintf(os.Stderr, "WARN: установленно нестандартное значение threads - %v"+
+		fmt.Fprintf(os.Stderr, "ВНИМАНИЕ: установленно нестандартное значение threads - %v"+
 			"(максимально разрешенное ОС кол-во открытых файлов - %v, программа открывает не более %v на один thread)\n", *threads, osMaxFiles, maxFilesPerWorker)
 	}
 
