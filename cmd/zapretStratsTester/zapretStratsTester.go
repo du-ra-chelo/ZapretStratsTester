@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func main() {
-	fmt.Println("Главный скрипт, запускает экземпляры isAvailable")
+	fmt.Println(cfg)
 }
