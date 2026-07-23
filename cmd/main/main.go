@@ -6,8 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
+	"ZapretStratsTester/internal/firewall"
 	"ZapretStratsTester/internal/osutil"
+)
+
+const (
+	cgroupSliceName = "ZST"
+	cgroupProcName  = "ZST-tester-" // + 1...
+	cgroupPath      = "/sys/fs/cgroup"
 )
 
 func main() {
@@ -30,7 +38,14 @@ func main() {
 		defer osutil.Systemctl("start", "zapret") // По окончании работы восстанавливаем состояние
 	}
 
-	// Сохраняем таблицу nft во временный файл в домашней дирректории
+	// Сохраняем таблицу nft во временный файл
+	if err := firewall.NftablesSave(); err != nil {
+		log.Fatal("не удалось создать бэкап таблицы: ", err)
+	}
+	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
+
+	// Прогнозируем пути cgroup
+	// cgroupPaths := predictCGPaths()
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
@@ -42,7 +57,7 @@ func checkDeps() error {
 	}
 	// Проверяем существует ли программа-тестер
 	if err := osutil.IsFileExist(cfg.testerBin,
-		"перекомпилируйте программу или укажите верный путь"); err != nil {
+		"программу или укажите верный путь"); err != nil {
 		return err
 	}
 
@@ -53,4 +68,17 @@ func checkDeps() error {
 		return fmt.Errorf("не удалось запустить nftables: %w", err)
 	}
 	return nil
+}
+
+// predictCGPaths генерирует список cgroup путей для запуска от рута
+// nftables игнорирует cgroupPath и сравнивает начиная со слайс дирректории
+func predictCGPaths() (cgroupPaths []string) {
+	sliceDir := fmt.Sprintf("/%s.slice", cgroupSliceName)
+
+	for n := range cfg.zapretThreads {
+		num := fmt.Sprintf("%v", n+1)
+		procName := filepath.Join(sliceDir, cgroupProcName+num)
+		cgroupPaths = append(cgroupPaths, procName)
+	}
+	return
 }
