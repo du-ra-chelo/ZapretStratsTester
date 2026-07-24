@@ -10,10 +10,8 @@
 package main
 
 import (
-	"io"
 	"log"
-	"net"
-	"strings"
+	"os"
 	"sync"
 	"time"
 
@@ -23,8 +21,8 @@ import (
 
 func main() {
 	// Ждем сигнала от программы-родителя, при неудаче завершаем программу ошибкой
-	if config.WithSocket != "" {
-		waitSocket()
+	if config.WithFile != "" {
+		withFile()
 	}
 	// Список доменов
 	domainsList, err := domains.ReadDomains(config.File)
@@ -101,42 +99,13 @@ func main() {
 	output.PrintTable(results)
 }
 
-// waitSocket ждет сообщения "READY" из сокета, в случае неудачи или таймаута останавливает программу
-// Вместо горутины можно использовать net.Accept с SetDeadline
-func waitSocket() {
-	listener, err := net.Listen("unix", config.WithSocket)
-	if err != nil {
-		log.Fatal("Ошибка при прослушивании unix сокета: ", err)
+func withFile() {
+	sleepTime := 100 * time.Millisecond
+	for t := 0; t < config.FileTimeout*10; t++ {
+		if _, err := os.Stat(config.WithFile); err == nil {
+			return
+		}
+		time.Sleep(sleepTime)
 	}
-	defer listener.Close()
-	// defer os.Remove(config.WithSocket) // Не удаляем сокет, его удалит программа-родитель
-	// Канал для сигнала о соединении
-	connChan := make(chan net.Conn)
-	errChan := make(chan error)
-
-	// Accept в горутине
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			connChan <- conn
-		}
-	}()
-	timeout := time.Duration(config.SocketTimeout) * time.Second
-	select {
-	case <-time.After(timeout):
-		log.Fatal("Таймаут ожидания unix сокета")
-	case err := <-errChan:
-		log.Fatal("Ошибка Accept socket: ", err)
-	case conn := <-connChan:
-		data, err := io.ReadAll(conn)
-		if err != nil {
-			log.Fatal("Ошибка чтения сообщения из unix сокета: ", err)
-		}
-		if sData := strings.Trim(string(data), "\n"); sData != "READY" {
-			log.Fatal("Неверные данные из unix сокета: ", sData)
-		}
-	}
+	log.Fatal("Время ожидания файла-сигнала начала прогроммы истекло")
 }

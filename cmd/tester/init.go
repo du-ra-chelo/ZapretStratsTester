@@ -16,8 +16,8 @@ type Config struct {
 	Retries    int
 	RetryDelay int
 
-	WithSocket    string
-	SocketTimeout int
+	WithFile    string
+	FileTimeout int
 
 	PrintProgress bool
 }
@@ -50,9 +50,9 @@ func init() {
 	retryDelay := flag.Int("retry-delay", 0, "Задержка между ретраями в мс. Умножается на номер попытки (0 - авто)")
 
 	flag.BoolVar(&progress, "print-progress", false, "Отображение прогресс бара")
-	withSocket := flag.String("with-socket", "", "Если указано значение, работа не начнется до получения сигнала READY из unix socket,"+
-		" таймаут ожидания сокета указывается флагом socket-timeout")
-	socketTimeout := flag.Int("socket-timeout", 3, "Таймаут ожидания (сек) значения из сокета (см .with-socket)")
+
+	withFile := flag.String("with-file", "", "Если указано значение, работа не начнется до появления файла-флага")
+	fileTimeout := flag.Int("file-timeout", 5, "Таймаут ожидания (сек) значения из сокета (см. with-file)")
 	flag.Parse()
 
 	// Если задержка не указана, используем 0 (domains подставит const)
@@ -145,8 +145,8 @@ func init() {
 		Retries:    *retries,
 		RetryDelay: *retryDelay,
 
-		WithSocket:    *withSocket,
-		SocketTimeout: *socketTimeout,
+		WithFile:    *withFile,
+		FileTimeout: *fileTimeout,
 
 		PrintProgress: progress,
 	}
