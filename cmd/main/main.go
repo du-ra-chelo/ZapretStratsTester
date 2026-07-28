@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"sync"
 
 	"ZapretStratsTester/internal/firewall"
 	"ZapretStratsTester/internal/osutil"
@@ -14,8 +14,9 @@ import (
 
 const (
 	cgroupSliceName = "ZST"
-	cgroupProcName  = "ZST-tester-" // + 1...
-	cgroupPath      = "/sys/fs/cgroup"
+	cgroupScopeName = "ZST-tester-" // + 1...15
+	cgroupHome      = "/sys/fs/cgroup"
+	readyFilePath   = "/tmp/nftables-ready"
 )
 
 func main() {
@@ -44,12 +45,36 @@ func main() {
 	}
 	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
 
-	// Прогнозируем пути cgroup
-	// cgroupPaths := predictCGPaths()
+	// Запускаем тестеры для инициализации cgroup
+	// Для нестандартных тестеров без ожидания файла-сигнала можно создать
+	// sleep infinity -> создать таблицу -> заменить sleep infinity на tester
+	var wg sync.WaitGroup
+	stratsAll, err := os.ReadDir(cfg.stratsDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Если в папке со стратегиями содежатся файлы неверного содержания, будет выведено сообщение
+	// Выполнение продолжится со следующего корректного файла
+	zapretInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
+	resultCh := make(chan osutil.CgroupResult, len(stratsAll))
+
+	// Остальные тестеры будут заменять выполнившиеся, не меняя имени
+	for n := 1; n <= cfg.zapretThreads; n++ {
+		scopeName := fmt.Sprintf("%s%d", cgroupScopeName, n)
+		wg.Add(1)
+		zapretInstanses <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-zapretInstanses }()
+			resultCh <- osutil.NewCGroupScope(cgroupSliceName, scopeName,
+				cfg.testerBin, "-file", cfg.domainsFile, "-with-file", readyFilePath)
+		}()
+	}
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
 func checkDeps() error {
+	// TODO: дополнить проверку необходимых программ
 	// Проверяем наличие zapret1 в сиситеме
 	if err := osutil.IsFileExist(cfg.zapretFolder,
 		"установите zapret или укажите верный путь"); err != nil {
@@ -68,17 +93,4 @@ func checkDeps() error {
 		return fmt.Errorf("не удалось запустить nftables: %w", err)
 	}
 	return nil
-}
-
-// predictCGPaths генерирует список cgroup путей для запуска от рута
-// nftables игнорирует cgroupPath и сравнивает начиная со слайс дирректории
-func predictCGPaths() (cgroupPaths []string) {
-	sliceDir := fmt.Sprintf("/%s.slice", cgroupSliceName)
-
-	for n := range cfg.zapretThreads {
-		num := fmt.Sprintf("%v", n+1)
-		procName := filepath.Join(sliceDir, cgroupProcName+num)
-		cgroupPaths = append(cgroupPaths, procName)
-	}
-	return
 }
