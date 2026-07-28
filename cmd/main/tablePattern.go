@@ -66,6 +66,7 @@ const (
 	ruleOutputTemplate = `add rule ` + tableTyp + ` ` + tableName +
 		` output oifname %s socket cgroupv2 level 0 "%s" meta marak set mark | %s`
 
-	tcp = "tcp dport {80,443}"
-	udp = "udp dport 443"
+	tcp           = "tcp dport {80,443}"
+	udp           = "udp dport 443"
+	startQueueNum = 201
 )
