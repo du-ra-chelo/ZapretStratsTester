@@ -40,6 +40,17 @@ func IsServiceActive(service string) (bool, error) {
 	return false, nil
 }
 
+func NewCGroupScope(slice, unit, prog string, pArgs ...string) CgroupResult {
+	cmdArgs := []string{"--scope", "--slice=" + slice, "--unit=" + unit, prog}
+	cmdArgs = append(cmdArgs, pArgs...)
+	cmd := exec.Command("systemd-run", cmdArgs...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		err = fmt.Errorf("systemd-run failed: %w, output: %s", err, out)
+	}
+	return CgroupResult{slice: slice, unit: unit, err: err}
+}
+
 // Файлы
 
 // IsFileExist проверяет существует ли файл, если нет, генерирует ошибку по шаблону + аргумент-решение
