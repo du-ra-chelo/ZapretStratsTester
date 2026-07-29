@@ -58,9 +58,9 @@ func main() {
 	zapretInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
 	resultCh := make(chan osutil.CgroupResult, len(stratsAll))
 
+	scopesNames := getScopesNames()
 	// Остальные тестеры будут заменять выполнившиеся, не меняя имени
-	for n := 1; n <= cfg.zapretThreads; n++ {
-		scopeName := fmt.Sprintf("%s%d", cgroupScopeName, n)
+	for _, scopeName := range scopesNames {
 		wg.Add(1)
 		zapretInstanses <- struct{}{}
 		go func() {
@@ -93,4 +93,12 @@ func checkDeps() error {
 		return fmt.Errorf("не удалось запустить nftables: %w", err)
 	}
 	return nil
+}
+
+func getScopesNames() []string {
+	scopesNames := make([]string, cfg.zapretThreads)
+	for n := 1; n < cfg.zapretThreads; n++ {
+		scopesNames = append(scopesNames, fmt.Sprintf("%s%d", cgroupScopeName, n))
+	}
+	return scopesNames
 }
