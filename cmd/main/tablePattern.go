@@ -40,11 +40,19 @@ table inet ZST {
 	}
 */
 const (
-	tableName      = "ZST"
-	tableTyp       = "inet"
-	markNFQWS      = "0x40000000"
-	markCGroup     = "0x0F000000"
-	nftablePattern = `table ` + tableTyp + " " + tableName + ` {
+	nftTableName = "ZST"
+	nftTableTyp  = "inet"
+
+	metaMarkNFQWS  = "0x40000000"
+	metaMarkCGroup = "0x0F000000"
+	metaMarkStep   = 0x01 << 24
+
+	nftTcp = "tcp dport {80,443}"
+	nftUdp = "udp dport 443"
+
+	startQueueNum = 201
+
+	nftTablePattern = `table ` + nftTableTyp + " " + nftTableName + ` {
 	chain output {
 	        type filter hook output priority 0; policy accept;
 	}
@@ -55,18 +63,15 @@ const (
 
 	chain predefrag {
 		type filter hook output priority -401; policy accept;
-		meta mark & ` + markNFQWS + ` != 0x00000000 notrack
+		meta mark & ` + metaMarkNFQWS + ` != 0x00000000 notrack
 	}
 
 }`
 
-	rulePostnatTemplate = `add rule ` + tableTyp + ` ` + tableName +
-		` postnat oifname %s meta mark & ` + markNFQWS + ` == 0x00000000 meta mark & ` +
-		markCGroup + ` == %s %s ct original packets 1-6 queue num %s bypass`
-	ruleOutputTemplate = `add rule ` + tableTyp + ` ` + tableName +
-		` output oifname %s socket cgroupv2 level 0 "%s" meta marak set mark | %s`
+	nftRuleOutputTemplate = `add rule ` + nftTableTyp + ` ` + nftTableName +
+		` output oifname %s socket cgroupv2 level 0 "%s" meta marak set mark | %x`
 
-	tcp           = "tcp dport {80,443}"
-	udp           = "udp dport 443"
-	startQueueNum = 201
+	nftRulePostnatTemplate = `add rule ` + nftTableTyp + ` ` + nftTableName +
+		` postnat oifname %s meta mark & ` + metaMarkNFQWS + ` == 0x00000000 meta mark & ` +
+		metaMarkCGroup + ` == %x %s ct original packets 1-6 queue num %d bypass`
 )
