@@ -47,8 +47,8 @@ const (
 	metaMarkCGroup        = "0x0F000000"
 	metaMarkStep   uint32 = 0x01000000
 
-	nftTcp = "tcp dport {80,443}"
-	nftUdp = "udp dport 443"
+	nftTCP = "tcp dport {80,443}"
+	nftUDP = "udp dport 443"
 
 	startQueueNum = 201
 

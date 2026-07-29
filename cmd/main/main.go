@@ -154,14 +154,14 @@ func nftableGenRules(scopesNames []string) error {
 		}
 		// TCP
 		rule = fmt.Sprintf(nftRulePostnatTemplate,
-			cfg.wanIface, metaMarkCG, nftTcp, queue) // Правило перенаправления tcp трафика в queue
+			cfg.wanIface, metaMarkCG, nftTCP, queue) // Правило перенаправления tcp трафика в queue
 		err = firewall.NftablesExec(rule)
 		if err != nil {
 			return fmt.Errorf("ошибка создания правила маршрутизации tcp cgroup: %w", err)
 		}
 		// UDP
 		rule = fmt.Sprintf(nftRulePostnatTemplate,
-			cfg.wanIface, metaMarkCG, nftUdp, queue) // Правило перенаправления udp трафика в queue
+			cfg.wanIface, metaMarkCG, nftUDP, queue) // Правило перенаправления udp трафика в queue
 		err = firewall.NftablesExec(rule)
 		if err != nil {
 			return fmt.Errorf("ошибка создания правила маршрутизации udp cgroup: %w", err)
