@@ -107,6 +107,9 @@ func checkDeps() error {
 }
 
 func getScopesNames() []string {
+	if cfg.zapretThreads < 1 {
+		log.Fatal("Установлено некорректное кол-во потоков zapret")
+	}
 	scopesNames := make([]string, 0, cfg.zapretThreads)
 	for n := 1; n <= cfg.zapretThreads; n++ {
 		scopesNames = append(scopesNames, fmt.Sprintf("%s%d", cgroupScopeName, n))
