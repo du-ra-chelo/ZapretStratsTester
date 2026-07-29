@@ -102,3 +102,41 @@ func getScopesNames() []string {
 	}
 	return scopesNames
 }
+
+// nftableGenRules создает правила в таблице nftables для обработки не более 15 экзэмпляров cgroup,
+// в противном случае произойдет переполнение маски 0x0F000000
+func nftableGenRules(scopesNames []string) error {
+	if len(scopesNames) > 15 {
+		return fmt.Errorf("правила не созданы: риск переполнения metaMark")
+	}
+	var metaMarkCG int32 = metaMarkStep
+	queue := startQueueNum
+	for _, scopeName := range scopesNames {
+		cgroup := fmt.Sprintf("/%s/%s",
+			cgroupSliceName, scopeName)
+		rule := fmt.Sprintf(nftRuleOutputTemplate,
+			cfg.wanIface, cgroup, metaMarkCG) // Праивло маркировки трафика процессов cgroup
+		// Marker
+		err := firewall.NftablesExec(rule)
+		if err != nil {
+			return fmt.Errorf("ошибка создания правила маркировки cgroup: %w", err)
+		}
+		// TCP
+		rule = fmt.Sprintf(nftRulePostnatTemplate,
+			cfg.wanIface, metaMarkCG, nftTcp, queue) // Правило перенаправления tcp трафика в queue
+		err = firewall.NftablesExec(rule)
+		if err != nil {
+			return fmt.Errorf("ошибка создания правила маршрутизации tcp cgroup: %w", err)
+		}
+		// UDP
+		rule = fmt.Sprintf(nftRulePostnatTemplate,
+			cfg.wanIface, metaMarkCG, nftUdp, queue) // Правило перенаправления udp трафика в queue
+		err = firewall.NftablesExec(rule)
+		if err != nil {
+			return fmt.Errorf("ошибка создания правила маршрутизации udp cgroup: %w", err)
+		}
+		metaMarkCG += metaMarkStep
+		queue++
+	}
+	return nil
+}
