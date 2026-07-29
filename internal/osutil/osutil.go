@@ -2,6 +2,7 @@
 package osutil
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -71,15 +72,32 @@ func KillCGroup(cgroupHome, sliceName string) error {
 		return fmt.Errorf("ошибка записи в cgroup.kill: %w", err)
 	}
 
-	// Даём время процессам завершиться
-	time.Sleep(100 * time.Millisecond)
+	// Ждём завершения всех процессов
+	procsPath := filepath.Join(slicePath, "cgroup.procs")
+	maxWait := 30 * time.Second
+	checkInterval := 100 * time.Millisecond
+	timeout := time.After(maxWait)
 
-	// Удаляем slice
-	if err := os.RemoveAll(slicePath); err != nil {
-		return fmt.Errorf("ошибка удаления slice: %w", err)
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("таймаут ожидания завершения процессов в %s", slicePath)
+		default:
+			data, err := os.ReadFile(procsPath)
+			if err != nil {
+				return fmt.Errorf("ошибка чтения cgroup.procs: %w", err)
+			}
+			// Если файл пуст или содержит только пробелы — процессов нет
+			if len(data) == 0 || len(bytes.TrimSpace(data)) == 0 {
+				// Удаляем slice
+				if err := os.RemoveAll(slicePath); err != nil {
+					return fmt.Errorf("ошибка удаления slice: %w", err)
+				}
+				return nil
+			}
+			time.Sleep(checkInterval)
+		}
 	}
-
-	return nil
 }
 
 // Файлы
