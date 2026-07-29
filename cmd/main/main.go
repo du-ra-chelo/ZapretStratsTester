@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	cgroupSliceName = "ZST"
-	cgroupScopeName = "ZST-tester-" // + 1...15
-	cgroupHome      = "/sys/fs/cgroup"
-	readyFilePath   = "/tmp/nftables-ready"
+	cgroupSliceName  = "ZST"
+	cgroupScopeName  = "ZST-tester-" // + 1...15
+	cgroupHome       = "/sys/fs/cgroup"
+	scopePathPattern = "/%s.slice/%s.scope"
+	readyFilePath    = "/tmp/nftables-ready"
 )
 
 func main() {
@@ -117,7 +118,7 @@ func nftableGenRules(scopesNames []string) error {
 	var metaMarkCG uint32 = metaMarkStep
 	queue := startQueueNum
 	for _, scopeName := range scopesNames {
-		cgroup := fmt.Sprintf("/%s.slice/%s.scope",
+		cgroup := fmt.Sprintf(scopePathPattern,
 			cgroupSliceName, scopeName)
 		rule := fmt.Sprintf(nftRuleOutputTemplate,
 			cfg.wanIface, cgroup, metaMarkCG) // Праивло маркировки трафика процессов cgroup
