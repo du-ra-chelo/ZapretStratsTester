@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -76,6 +77,10 @@ func main() {
 	// В случае остановки программы все процессы останавливаются, слайс удаляется
 	defer osutil.KillCGroup(cgroupHome, cgroupSliceName)
 
+	err = firewall.NftablesApply(nftTablePattern)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
