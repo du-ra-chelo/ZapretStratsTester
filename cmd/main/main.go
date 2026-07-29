@@ -81,6 +81,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Ждем создания всех cgroup
+	func() {
+		lastScope := fmt.Sprintf(scopePathPattern,
+			cgroupSliceName, scopesNames[len(scopesNames)-1]) // Длина не меньше 1
+		lastScopePath := filepath.Join(cgroupHome, lastScope)
+		for range 6 { // 5 сек
+			if err := osutil.IsFileExist(lastScopePath, ""); err == nil {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	// Дополняем таблицу правилами перенаправления трафика
+	err = nftableGenRules(scopesNames)
+	if err != nil {
+		log.Fatal("ошибка при установке временных правил: ", err)
+	}
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
