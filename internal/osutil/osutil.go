@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"time"
 )
 
 // Службы, процессы, сервисы
@@ -40,6 +42,9 @@ func IsServiceActive(service string) (bool, error) {
 	return false, nil
 }
 
+// TODO: cgroup struct?
+
+// NewCGroupScope создает новый unit в cgroup
 func NewCGroupScope(slice, unit, prog string, pArgs ...string) CgroupResult {
 	cmdArgs := []string{"--scope", "--slice=" + slice, "--unit=" + unit, prog}
 	cmdArgs = append(cmdArgs, pArgs...)
@@ -49,6 +54,32 @@ func NewCGroupScope(slice, unit, prog string, pArgs ...string) CgroupResult {
 		err = fmt.Errorf("systemd-run failed: %w, output: %s", err, out)
 	}
 	return CgroupResult{slice: slice, unit: unit, err: err}
+}
+
+// KillCGroup отправляет SIGKILL всем процессам в slice
+func KillCGroup(cgroupHome, sliceName string) error {
+	slicePath := filepath.Join(cgroupHome, sliceName+".slice")
+
+	// Проверяем существование
+	if _, err := os.Stat(slicePath); err != nil {
+		return fmt.Errorf("cgroup не существует: %w", err)
+	}
+
+	// Записываем "1" в cgroup.kill (только запись)
+	killerPath := filepath.Join(slicePath, "cgroup.kill")
+	if err := os.WriteFile(killerPath, []byte("1"), 0o200); err != nil {
+		return fmt.Errorf("ошибка записи в cgroup.kill: %w", err)
+	}
+
+	// Даём время процессам завершиться
+	time.Sleep(100 * time.Millisecond)
+
+	// Удаляем slice
+	if err := os.RemoveAll(slicePath); err != nil {
+		return fmt.Errorf("ошибка удаления slice: %w", err)
+	}
+
+	return nil
 }
 
 // Файлы

@@ -72,6 +72,9 @@ func main() {
 				cfg.testerBin, "-file", cfg.domainsFile, "-with-file", readyFilePath)
 		}()
 	}
+	// В случае остановки программы все процессы останавливаются, слайс удаляется
+	defer osutil.KillCGroup(cgroupHome, cgroupSliceName)
+
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
