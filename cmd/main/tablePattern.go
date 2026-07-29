@@ -43,9 +43,9 @@ const (
 	nftTableName = "ZST"
 	nftTableTyp  = "inet"
 
-	metaMarkNFQWS  = "0x40000000"
-	metaMarkCGroup = "0x0F000000"
-	metaMarkStep   = 0x01 << 24
+	metaMarkNFQWS         = "0x40000000"
+	metaMarkCGroup        = "0x0F000000"
+	metaMarkStep   uint32 = 0x01000000
 
 	nftTcp = "tcp dport {80,443}"
 	nftUdp = "udp dport 443"
@@ -69,9 +69,9 @@ const (
 }`
 
 	nftRuleOutputTemplate = `add rule ` + nftTableTyp + ` ` + nftTableName +
-		` output oifname %s socket cgroupv2 level 0 "%s" meta marak set mark | %x`
+		` output oifname %s socket cgroupv2 level 0 "%s" meta mark set mark | 0x%08x`
 
 	nftRulePostnatTemplate = `add rule ` + nftTableTyp + ` ` + nftTableName +
 		` postnat oifname %s meta mark & ` + metaMarkNFQWS + ` == 0x00000000 meta mark & ` +
-		metaMarkCGroup + ` == %x %s ct original packets 1-6 queue num %d bypass`
+		metaMarkCGroup + ` == 0x%08x %s ct original packets 1-6 queue num %d bypass`
 )

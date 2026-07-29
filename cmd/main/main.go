@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"sync"
+	"time"
 
 	"ZapretStratsTester/internal/firewall"
 	"ZapretStratsTester/internal/osutil"
@@ -96,8 +98,8 @@ func checkDeps() error {
 }
 
 func getScopesNames() []string {
-	scopesNames := make([]string, cfg.zapretThreads)
-	for n := 1; n < cfg.zapretThreads; n++ {
+	scopesNames := make([]string, 0, cfg.zapretThreads)
+	for n := 1; n <= cfg.zapretThreads; n++ {
 		scopesNames = append(scopesNames, fmt.Sprintf("%s%d", cgroupScopeName, n))
 	}
 	return scopesNames
@@ -109,10 +111,10 @@ func nftableGenRules(scopesNames []string) error {
 	if len(scopesNames) > 15 {
 		return fmt.Errorf("правила не созданы: риск переполнения metaMark")
 	}
-	var metaMarkCG int32 = metaMarkStep
+	var metaMarkCG uint32 = metaMarkStep
 	queue := startQueueNum
 	for _, scopeName := range scopesNames {
-		cgroup := fmt.Sprintf("/%s/%s",
+		cgroup := fmt.Sprintf("/%s.slice/%s.scope",
 			cgroupSliceName, scopeName)
 		rule := fmt.Sprintf(nftRuleOutputTemplate,
 			cfg.wanIface, cgroup, metaMarkCG) // Праивло маркировки трафика процессов cgroup
