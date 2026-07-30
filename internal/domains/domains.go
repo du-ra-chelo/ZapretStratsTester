@@ -12,7 +12,7 @@ type Domain struct {
 
 // IsAvailable определяет доступность домена или IP-адреса.
 func IsAvailable(domain, ping, http, tls12, tls13 string) bool {
-	// Если это IP-адрес - доступен
+	// Если это IP-адрес - доступен при ответе ping
 	if IsIP(domain) {
 		return ping != "FAIL" && ping != "N/A" && ping != ""
 	}
