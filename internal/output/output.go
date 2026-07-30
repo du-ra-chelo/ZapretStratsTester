@@ -4,7 +4,9 @@ package output
 // TODO: улучшеный output
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -135,4 +137,13 @@ func truncateByRune(s string, maxLen int) string {
 		return string(runes[:maxLen])
 	}
 	return string(runes[:maxLen-3]) + "..."
+}
+
+func PrintJSON(results []domains.Domain) {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(results); err != nil {
+		fmt.Fprintf(os.Stderr, "JSON encoding error: %v", err)
+		os.Exit(1)
+	}
 }
