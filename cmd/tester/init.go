@@ -35,7 +35,7 @@ const (
 
 var outputFormats = map[string]func([]domains.Domain){
 	"table": output.PrintTable,
-	"json":  output.PrintJson,
+	"json":  output.PrintJSON,
 }
 
 var config Config // Глобальные настройки программы
