@@ -6,6 +6,9 @@ import (
 	"os"
 	"runtime"
 	"syscall"
+
+	"ZapretStratsTester/internal/domains"
+	"ZapretStratsTester/internal/output"
 )
 
 type Config struct {
@@ -19,12 +22,21 @@ type Config struct {
 	WithFile    string
 	FileTimeout int
 
-	PrintProgress bool
+	Progress     bool
+	OutputFormat string
 }
 
 // На один воркер нужно минимум 4 файловых дескриптора
 // Не упираемся в лимит OC, 1 запасной
-const maxFilesPerWorker = 4 + 1
+const (
+	maxFilesPerWorker   = 4 + 1
+	defaultOutputFormat = "table"
+)
+
+var outputFormats = map[string]func([]domains.Domain){
+	"table": output.PrintTable,
+	"json":  output.PrintJson,
+}
 
 var config Config // Глобальные настройки программы
 
@@ -49,10 +61,12 @@ func init() {
 	retries := flag.Int("retries", 1, "Количество повторных попыток запроса к домену/айпи")
 	retryDelay := flag.Int("retry-delay", 0, "Задержка между ретраями в мс. Умножается на номер попытки (0 - авто)")
 
-	flag.BoolVar(&progress, "print-progress", false, "Отображение прогресс бара")
+	flag.BoolVar(&progress, "progress", false, "Отображение прогресс бара")
 
 	withFile := flag.String("with-file", "", "Если указано значение, работа не начнется до появления файла-флага")
 	fileTimeout := flag.Int("file-timeout", 5, "Таймаут ожидания (сек) значения из сокета (см. with-file)")
+	outputFormat := flag.String("output", "table", "Формат вывода результатов тестирования. Поддерживаются: table, json."+
+		" При установке неподдерживаемого формата будет использоваться "+defaultOutputFormat+". Флаг progress не влияет на формат вывода")
 	flag.Parse()
 
 	// Если задержка не указана, используем 0 (domains подставит const)
@@ -148,6 +162,7 @@ func init() {
 		WithFile:    *withFile,
 		FileTimeout: *fileTimeout,
 
-		PrintProgress: progress,
+		Progress:     progress,
+		OutputFormat: *outputFormat,
 	}
 }

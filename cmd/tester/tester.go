@@ -10,6 +10,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -45,7 +46,7 @@ func main() {
 	// Для вывода строки прогресса
 	// resultChan используется прогресс баром для чтения, сортировка читает из progressOut
 	var progressWG *sync.WaitGroup
-	if config.PrintProgress {
+	if config.Progress {
 		var wg sync.WaitGroup
 		progressWG = &wg
 		progressOut := make(chan *IndexedResult, len(domainsList))
@@ -96,7 +97,7 @@ func main() {
 	if progressWG != nil {
 		progressWG.Wait()
 	}
-	output.PrintTable(results)
+	printResults(results)
 }
 
 func withFile() {
@@ -108,4 +109,19 @@ func withFile() {
 		time.Sleep(sleepTime)
 	}
 	log.Fatal("Время ожидания файла-сигнала начала прогроммы истекло")
+}
+
+// printResults вызывает функцию вывода результатов, основываясь на наличии выходного формата в map.
+// При некорректном формате исползуется defaultOutputFormat
+func printResults(results []domains.Domain) {
+	if fn, ok := outputFormats[config.OutputFormat]; ok {
+		fn(results)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Неверный формат: %s, использую %s\n", config.OutputFormat, defaultOutputFormat)
+	if fn, ok := outputFormats[defaultOutputFormat]; ok {
+		fn(results)
+		return
+	}
+	panic("функции для форматирования в defaultOutputFormat не существует")
 }
