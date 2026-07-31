@@ -23,29 +23,54 @@ const (
 	readyFilePath    = "/tmp/nftables-ready"
 )
 
+const (
+	ExitSuccess = iota
+	ExitGeneralError
+	ExitUsage
+	ExitConfig
+	ExitNetwork
+	ExitPermission
+	ExitIO
+	ExitDependency
+)
+
+var OsExit = ExitSuccess
+
 func main() {
+	// defer для установки кода завершения.
+	// Вместо log.Fatal используется fmt.Fprintf(os.Stderr, ...) + установка osExit
+	defer func() {
+		if OsExit != 0 {
+			os.Exit(OsExit)
+		}
+	}()
 	// Проверка прав пользователя
 	if os.Geteuid() != 0 {
-		fmt.Fprintln(os.Stderr, "Ошибка: требуется запуск с правами root")
-		os.Exit(1)
+		fatal(ExitPermission, "Ошибка: требуется запуск с правами root")
+		return
 	}
 	// Наличие зависимостей: zapret, tester, nftables|iptables
 	if err := checkDeps(); err != nil {
-		log.Fatal(err)
+		fatal(ExitDependency, "Ошибка: не обнаружены необходимые зависимости: %s\n", err)
+		return
 	}
 	// Пробуем завершить системный Zapret, если тот запущен
 	if active, err := osutil.IsServiceActive("zapret"); err != nil {
-		log.Fatal(err) // Серивис не существует или непредвиденная ошибка systemctl
+		// Серивис не существует или непредвиденная ошибка systemctl
+		fatal(ExitGeneralError, "Ошибка: не удалось проверить статус zapret.service: %s\n", err)
+		return
 	} else if active {
 		if err := osutil.Systemctl("stop", "zapret"); err != nil { // Пробуем остановить
-			log.Fatal(err)
+			fatal(ExitGeneralError, "Ошибка: не удалось завершить zapret.service: %s\n", err)
+			return
 		}
 		defer osutil.Systemctl("start", "zapret") // По окончании работы восстанавливаем состояние
 	}
 
 	// Сохраняем таблицу nft во временный файл
 	if err := firewall.NftablesSave(); err != nil {
-		log.Fatal("не удалось создать бэкап таблицы: ", err)
+		fatal(ExitGeneralError, "Ошибка: нe удалось создать бэкап таблицы: %s\n", err)
+		return
 	}
 	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
 
@@ -55,7 +80,8 @@ func main() {
 	var wg sync.WaitGroup
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
 	if err != nil {
-		log.Fatal(err)
+		fatal(ExitGeneralError, "Ошибка: не удалось прочитать стратегии из директории %s: %s\n", cfg.stratsDir, err)
+		return
 	}
 	// Если в папке со стратегиями содежатся файлы неверного содержания, будет выведено сообщение
 	// Выполнение продолжится со следующего корректного файла
@@ -79,7 +105,8 @@ func main() {
 
 	err = firewall.NftablesApply(nftTablePattern)
 	if err != nil {
-		log.Fatal(err)
+		fatal(ExitGeneralError, "Ошибка: не удалось применить шаблон nftables: %s\n", err)
+		return
 	}
 	// Ждем создания всех cgroup
 	func() {
@@ -98,6 +125,12 @@ func main() {
 	if err != nil {
 		log.Fatal("ошибка при установке временных правил: ", err)
 	}
+	fmt.Println(string(result))
+}
+
+func fatal(exitCode int, msg string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg, args...)
+	OsExit = exitCode
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе
@@ -125,7 +158,7 @@ func checkDeps() error {
 
 func getScopesNames() []string {
 	if cfg.zapretThreads < 1 {
-		log.Fatal("Установлено некорректное кол-во потоков zapret")
+		panic("Неверное кол-во потоков")
 	}
 	scopesNames := make([]string, 0, cfg.zapretThreads)
 	for n := 1; n <= cfg.zapretThreads; n++ {
