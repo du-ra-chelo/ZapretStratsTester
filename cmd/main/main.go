@@ -68,6 +68,7 @@ func main() {
 	}
 
 	// Сохраняем таблицу nft во временный файл
+	// TODO: iptables
 	if err := firewall.NftablesSave(); err != nil {
 		fatal(ExitGeneralError, "Ошибка: нe удалось создать бэкап таблицы: %s\n", err)
 		return
@@ -96,6 +97,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			defer func() { <-zapretInstanses }()
+			// TODO: Генерация файлов с доменами в /tmp
 			resultCh <- osutil.NewCGroupScope(cgroupSliceName, scopeName,
 				cfg.testerBin, "-file", cfg.domainsFile, "-with-file", readyFilePath)
 		}()

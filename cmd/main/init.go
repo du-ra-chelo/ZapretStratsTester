@@ -53,6 +53,7 @@ func init() {
 	var zapretFolder stringValue = defaultPathZapret
 	flag.Var(&zapretFolder, "zapret", "Путь к папке zapret (default "+defaultPathZapret+")")
 	flag.Var(&zapretFolder, "z", "Путь к папке zapret (default "+defaultPathZapret+")")
+	// TODO: авто установка кол-ва потоков
 	zapretThreads := flag.Int("zapret-threads", 3, "Кол-во одновременно запущенных экземпляров zapret")
 
 	wanIface := flag.String("wan", "wlan0", "Имя wan интерфейса для выхода в интернет")
