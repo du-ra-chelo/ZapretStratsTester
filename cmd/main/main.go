@@ -123,7 +123,8 @@ func main() {
 	// Дополняем таблицу правилами перенаправления трафика
 	err = nftableGenRules(scopesNames)
 	if err != nil {
-		log.Fatal("ошибка при установке временных правил: ", err)
+		fatal(ExitGeneralError, "Ошибка: не удалось установить временные правила: %s\n", err)
+		return
 	}
 	fmt.Println(string(result))
 }
