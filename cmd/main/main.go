@@ -3,8 +3,8 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,4 +206,60 @@ func nftableGenRules(scopesNames []string) error {
 		queue++
 	}
 	return nil
+}
+
+// uniqueFileGen - через замыкание возвращает функцию, которая созает файл с названием требуемого формата в переданной дирректории.
+// Созданные файлы содержат одинаковые данные из cfg.domainsFile, но в разном порядке
+func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
+	domainsList, err := os.Open(cfg.domainsFile)
+	if err != nil {
+		return nil, err
+	}
+	defer domainsList.Close()
+	// Читаем все строки и добавляем в слайс
+	lines := make([]string, 0)
+	reader := bufio.NewReader(domainsList)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		lines = append(lines, line)
+	}
+
+	// TODO: множитель зависит от нужного кол-ва единовременных файлов
+	startLine := 0
+	step := len(lines) * 10 / 100
+	return func(fargs ...any) string {
+		// В случае ошибки функция вернет пустую строку
+		if len(lines) == 0 {
+			return ""
+		}
+		// Копируем строки
+		ll := make([]string, 0)
+		ll = append(lines[startLine:len(lines)-1], lines[0:startLine]...)
+		startLine += step
+		if startLine > len(lines) {
+			startLine -= len(lines)
+		}
+		// Создаем файл
+		fName := fmt.Sprintf(fFmt, fargs...)
+		fPath := filepath.Join(dir, fName)
+		f, err := os.OpenFile(fPath, os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return ""
+		}
+		defer f.Close()
+		// Переносим строки
+		writer := bufio.NewWriter(f)
+		for _, l := range ll {
+			if _, err := writer.WriteString(l); err != nil {
+				return ""
+			}
+		}
+		if err := writer.Flush(); err != nil {
+			return ""
+		}
+		return fPath
+	}, nil
 }
