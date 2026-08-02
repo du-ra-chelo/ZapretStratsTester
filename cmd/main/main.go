@@ -36,6 +36,8 @@ const (
 	ExitDependency
 )
 
+var StratsArray = []string{"/opt/zapret/zapret.cfgs/configurations/discord", "/opt/zapret/zapret.cfgs/configurations/UltimateFix", "/opt/zapret/zapret.cfgs/configurations/general_ALT10"}
+
 var OsExit = ExitSuccess
 
 func main() {
