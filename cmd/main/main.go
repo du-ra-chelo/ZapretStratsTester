@@ -81,6 +81,12 @@ func main() {
 		return
 	}
 
+	// Запускаем testers и nfqws procs
+	type Tester struct {
+		Cgroup osutil.Cgroup
+		Req    nfqws.Req
+		Result []domains.Domain // json
+	}
 
 	var wg sync.WaitGroup
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
