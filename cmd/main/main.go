@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"ZapretStratsTester/internal/domains"
 	"ZapretStratsTester/internal/firewall"
+	"ZapretStratsTester/internal/nfqws"
 	"ZapretStratsTester/internal/osutil"
 )
 
