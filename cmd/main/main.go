@@ -225,17 +225,6 @@ func checkDeps() error {
 	return nil
 }
 
-func getScopesNames() []string {
-	if cfg.zapretThreads < 1 {
-		panic("Неверное кол-во потоков")
-	}
-	scopesNames := make([]string, 0, cfg.zapretThreads)
-	for n := 1; n <= cfg.zapretThreads; n++ {
-		scopesNames = append(scopesNames, fmt.Sprintf("%s%d", cgroupScopeName, n))
-	}
-	return scopesNames
-}
-
 // nftableGenRules создает правила в таблице nftables для обработки не более 15 экзэмпляров cgroup,
 // в противном случае произойдет переполнение маски 0x0F000000
 func nftableGenRules(scopesNames []string) error {
