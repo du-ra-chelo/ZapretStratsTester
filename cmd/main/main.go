@@ -194,7 +194,30 @@ func main() {
 		fatal(ExitGeneralError, "Ошибка: не удалось установить временные правила: %s\n", err)
 		return
 	}
-	fmt.Println(string(result))
+	// TEST
+	// nft
+	cmd := exec.Command("nft", "list table inet ZST")
+	out, _ := cmd.CombinedOutput()
+	fmt.Println("Правила: ", string(out))
+	// nfqws
+	psOut, err := exec.Command("ps", "aux").Output()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("nfqws:")
+	rg := exec.Command("rg", "nfqws")
+	rg.Stdin = bytes.NewReader(psOut)
+	result, err := rg.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				fmt.Println("Ничего не найдено")
+				return
+			}
+		}
+		panic(err)
+	}
+	fmt.Printf("Res: %v\n", string(result))
 }
 
 func fatal(exitCode int, msg string, args ...any) {
