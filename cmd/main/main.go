@@ -65,6 +65,7 @@ func main() {
 			return
 		}
 		defer osutil.Systemctl("start", "zapret") // По окончании работы восстанавливаем состояние
+		defer fmt.Println("Запуск запрета")
 	}
 
 	// Сохраняем таблицу nft во временный файл
@@ -74,36 +75,83 @@ func main() {
 		return
 	}
 	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
+	defer fmt.Println("Восстановление nftables")
 
-	// Запускаем тестеры для инициализации cgroup
-	// Для нестандартных тестеров без ожидания файла-сигнала можно создать
-	// sleep infinity -> создать таблицу -> заменить sleep infinity на tester
 	var wg sync.WaitGroup
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
 	if err != nil {
 		fatal(ExitGeneralError, "Ошибка: не удалось прочитать стратегии из директории %s: %s\n", cfg.stratsDir, err)
 		return
 	}
-	// Если в папке со стратегиями содежатся файлы неверного содержания, будет выведено сообщение
-	// Выполнение продолжится со следующего корректного файла
-	zapretInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
-	resultCh := make(chan osutil.CgroupResult, len(stratsAll))
 
-	scopesNames := getScopesNames()
+	resultCh := make(chan Tester, len(stratsAll))
+	nfqwsInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
+	nfqwsReqCh := make(chan nfqws.Req, cfg.zapretThreads)
+	nfqwsErrCh := make(chan error)
+
+	nfqwsPath := getNfqwsBinPath()
+	manager := nfqws.NewManager(nfqwsPath, nfqwsReqCh, nfqwsErrCh)
+	manager.Start()
+	defer func() {
+		go func() {
+			for err := range nfqwsErrCh {
+				if err != nil {
+					fmt.Println("Ошбка завершения nfqws", err)
+				}
+			}
+		}()
+		manager.Stop()
+	}()
+	defer fmt.Println("Остановка manager")
+
+	getUnDomainsFile, err := uniqueFileGen(tmpDomainsDir, tmpDomainsName)
+	if err != nil {
+		fatal(ExitIO, "Ошибка при открытии/чтении файла с доменами: %s", err)
+		return
+	}
+
 	// Остальные тестеры будут заменять выполнившиеся, не меняя имени
-	for _, scopeName := range scopesNames {
+	scopesNames := make([]string, 0, cfg.zapretThreads)
+	for q := range cfg.zapretThreads {
+		qnum := nfqwsStartQnum + q
+		scopesNames = append(scopesNames, fmt.Sprintf(cgroupScopeName, qnum)) // Индекс scope name == qnum-nfqwsStartQnum
+
+		unDomainsFile := getUnDomainsFile(qnum) // Создаем разные файлы с доменами для каждого тестера
+		if unDomainsFile == "" {
+			fatal(ExitIO, "Ошибка: не удалось заполнить доменами временный файл в %s: %s", tmpDomainsDir, err)
+			return
+		}
+
+		tester := Tester{Req: nfqws.Req{Queue: qnum, Args: StratsArray[q]}}
+
+		nfqwsInstanses <- struct{}{}
 		wg.Add(1)
-		zapretInstanses <- struct{}{}
 		go func() {
 			defer wg.Done()
-			defer func() { <-zapretInstanses }()
-			// TODO: Генерация файлов с доменами в /tmp
-			resultCh <- osutil.NewCGroupScope(cgroupSliceName, scopeName,
-				cfg.testerBin, "-file", cfg.domainsFile, "-with-file", readyFilePath)
+			defer func() { <-nfqwsInstanses }()
+
+			// Запрашиваем у manager запуск nfqws, ждем результат
+			nfqwsReqCh <- tester.Req
+			if err := <-nfqwsErrCh; err != nil {
+				fatal(ExitGeneralError, "Ошибка: не удалось запустить новый процесс nfqws: %s", err)
+				return
+			}
+			// Создаем cgroup
+			// -with-file - запускаем только после генерации таблицы
+			tester.Cgroup = osutil.NewCGroupScope(cgroupSliceName, scopesNames[q],
+				cfg.testerBin, "-file", unDomainsFile, "-with-file", readyFilePath, "-file-timeout", "20")
+			if tester.Cgroup.Err != nil {
+				fatal(ExitGeneralError, "Ошибка: не удалось запустить процесс tester в cgroup: %s",
+					tester.Cgroup.Err)
+				return
+			}
+			fmt.Printf("Cgroup создана, tester: \n%v\n%v\n", tester.Cgroup.Slice, tester.Req.Args)
+			resultCh <- tester
 		}()
 	}
 	// В случае остановки программы все процессы останавливаются, слайс удаляется
-	defer osutil.KillCGroup(cgroupHome, cgroupSliceName)
+	defer osutil.KillCGroup(osutil.CGroupLynxSystemdPath, cgroupSliceName)
+	defer fmt.Println("Остановка cgroup")
 
 	err = firewall.NftablesApply(nftTablePattern)
 	if err != nil {
@@ -117,9 +165,11 @@ func main() {
 		lastScopePath := filepath.Join(cgroupHome, lastScope)
 		for range 6 { // 5 сек
 			if err := osutil.IsFileExist(lastScopePath, ""); err == nil {
+				fmt.Println("Последний тестер создан")
 				break
 			}
 			time.Sleep(1 * time.Second)
+			fmt.Println("Жду создания тестера: ", lastScopePath)
 		}
 	}()
 	// Дополняем таблицу правилами перенаправления трафика
