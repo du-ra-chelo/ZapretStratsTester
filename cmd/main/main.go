@@ -218,6 +218,15 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Res: %v\n", string(result))
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	for t := range resultCh {
+		fmt.Println(string(t.Cgroup.Out))
+	}
 }
 
 func fatal(exitCode int, msg string, args ...any) {
