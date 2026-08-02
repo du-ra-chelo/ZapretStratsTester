@@ -76,6 +76,11 @@ func main() {
 	}
 	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
 	defer fmt.Println("Восстановление nftables")
+	if err := firewall.NftablesClear(); err != nil {
+		fatal(ExitGeneralError, "Ошибка: не удалось очистить правила: %s", err)
+		return
+	}
+
 
 	var wg sync.WaitGroup
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
