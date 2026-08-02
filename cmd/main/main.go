@@ -17,10 +17,12 @@ import (
 
 const (
 	cgroupSliceName  = "ZST"
-	cgroupScopeName  = "ZST-tester-" // + 1...15
-	cgroupHome       = "/sys/fs/cgroup"
+	cgroupScopeName  = "ZST-tester-%d" // + 1...15
 	scopePathPattern = "/%s.slice/%s.scope"
 	readyFilePath    = "/tmp/nftables-ready"
+	tmpDomainsName   = "ZST-domains-qnum%d"
+	tmpDomainsDir    = "/tmp"
+	nfqwsStartQnum   = 201
 )
 
 const (
