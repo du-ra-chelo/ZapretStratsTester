@@ -43,12 +43,17 @@ var StratsArray = []string{"/opt/zapret/zapret.cfgs/configurations/discord", "/o
 
 var OsExit = ExitSuccess
 
+const PanicSIGINT = "SIGINT"
+
 func main() {
 	// defer для установки кода завершения.
 	// Вместо log.Fatal используется fatal() - обертка над fmt.Fprintf(os.Stderr, ...) + установка osExit
 	defer func() {
 		os.Exit(OsExit)
 	}()
+
+	// TODO: перехват SIGINT
+
 	// Проверка прав пользователя
 	if os.Geteuid() != 0 {
 		fatal(ExitPermission, "Ошибка: требуется запуск с правами root")
@@ -175,6 +180,7 @@ func main() {
 		return
 	}
 	// Ждем создания всех cgroup
+	// TODO: горутины для всех процессов
 	func() {
 		lastScope := fmt.Sprintf(scopePathPattern,
 			cgroupSliceName, scopesNames[len(scopesNames)-1]) // Длина не меньше 1
