@@ -173,7 +173,7 @@ func main() {
 	func() {
 		lastScope := fmt.Sprintf(scopePathPattern,
 			cgroupSliceName, scopesNames[len(scopesNames)-1]) // Длина не меньше 1
-		lastScopePath := filepath.Join(cgroupHome, lastScope)
+		lastScopePath := filepath.Join(osutil.CGroupLynxSystemdPath, lastScope)
 		for range 6 { // 5 сек
 			if err := osutil.IsFileExist(lastScopePath, ""); err == nil {
 				fmt.Println("Последний тестер создан")
@@ -192,7 +192,7 @@ func main() {
 	fmt.Println(string(result))
 }
 
-func fatal(exitCode int, msg string, args ...interface{}) {
+func fatal(exitCode int, msg string, args ...any) {
 	fmt.Fprintf(os.Stderr, msg, args...)
 	OsExit = exitCode
 }
