@@ -271,6 +271,11 @@ func nftableGenRules(scopesNames []string) error {
 	return nil
 }
 
+func getNfqwsBinPath() string {
+	// TODO: автоопределение бинарника для каждой платформы
+	return filepath.Join(cfg.zapretFolder, "binaries/linux-x86_64/nfqws")
+}
+
 // uniqueFileGen - через замыкание возвращает функцию, которая созает файл с названием требуемого формата в переданной дирректории.
 // Созданные файлы содержат одинаковые данные из cfg.domainsFile, но в разном порядке
 func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
