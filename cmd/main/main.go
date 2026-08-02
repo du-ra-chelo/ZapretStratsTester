@@ -40,11 +40,9 @@ var OsExit = ExitSuccess
 
 func main() {
 	// defer для установки кода завершения.
-	// Вместо log.Fatal используется fmt.Fprintf(os.Stderr, ...) + установка osExit
+	// Вместо log.Fatal используется fatal() - обертка над fmt.Fprintf(os.Stderr, ...) + установка osExit
 	defer func() {
-		if OsExit != 0 {
-			os.Exit(OsExit)
-		}
+		os.Exit(OsExit)
 	}()
 	// Проверка прав пользователя
 	if os.Geteuid() != 0 {
