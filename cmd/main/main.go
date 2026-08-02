@@ -325,9 +325,8 @@ func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
 		lines = append(lines, line)
 	}
 
-	// TODO: множитель зависит от нужного кол-ва единовременных файлов
 	startLine := 0
-	step := len(lines) * 10 / 100
+	step := len(lines) * cfg.zapretThreads / 10
 	return func(fargs ...any) string {
 		// В случае ошибки функция вернет пустую строку
 		if len(lines) == 0 {
