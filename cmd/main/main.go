@@ -107,7 +107,7 @@ func main() {
 
 	resultCh := make(chan Tester, len(stratsAll))
 	nfqwsInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
-	nfqwsReqCh := make(chan nfqws.Req, cfg.zapretThreads)
+	nfqwsReqCh := make(chan nfqws.Req)                       // Чан запросов без буффера
 	nfqwsErrCh := make(chan error)
 
 	nfqwsPath := getNfqwsBinPath()
