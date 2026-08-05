@@ -5,11 +5,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ZapretStratsTester/internal/domains"
@@ -38,8 +40,6 @@ const (
 	ExitIO
 	ExitDependency
 )
-
-var StratsArray = []string{"/opt/zapret/zapret.cfgs/configurations/discord", "/opt/zapret/zapret.cfgs/configurations/UltimateFix", "/opt/zapret/zapret.cfgs/configurations/general_ALT10"}
 
 var OsExit = ExitSuccess
 
@@ -98,7 +98,6 @@ func main() {
 		Result []domains.Domain // json
 	}
 
-	var wg sync.WaitGroup
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
 	if err != nil {
 		fatal(ExitGeneralError, "Ошибка: не удалось прочитать стратегии из директории %s: %s\n", cfg.stratsDir, err)
@@ -106,9 +105,8 @@ func main() {
 	}
 
 	resultCh := make(chan Tester, len(stratsAll))
-	nfqwsInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
-	nfqwsReqCh := make(chan nfqws.Req)                       // Чан запросов без буффера
-	nfqwsErrCh := make(chan error)
+	nfqwsReqCh := make(chan nfqws.Req)             // Чан запросов без буффера
+	nfqwsErrCh := make(chan error, len(stratsAll)) // Все ошибки в буфере, выводим по завершении
 
 	nfqwsPath := getNfqwsBinPath()
 	manager := nfqws.NewManager(nfqwsPath, nfqwsReqCh, nfqwsErrCh)
@@ -131,49 +129,99 @@ func main() {
 		return
 	}
 
-	// Остальные тестеры будут заменять выполнившиеся, не меняя имени
-	scopesNames := make([]string, 0, cfg.zapretThreads)
-	for q := range cfg.zapretThreads {
-		qnum := nfqwsStartQnum + q
-		scopesNames = append(scopesNames, fmt.Sprintf(cgroupScopeName, qnum)) // Индекс scope name == qnum-nfqwsStartQnum
-
-		unDomainsFile := getUnDomainsFile(qnum) // Создаем разные файлы с доменами для каждого тестера
-		if unDomainsFile == "" {
-			fatal(ExitIO, "Ошибка: не удалось заполнить доменами временный файл в %s: %s", tmpDomainsDir, err)
-			return
-		}
-
-		tester := Tester{Req: nfqws.Req{Queue: qnum, Args: StratsArray[q]}}
-
-		nfqwsInstanses <- struct{}{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-nfqwsInstanses }()
-
-			// Запрашиваем у manager запуск nfqws, ждем результат
-			nfqwsReqCh <- tester.Req
-			if err := <-nfqwsErrCh; err != nil {
-				fatal(ExitGeneralError, "Ошибка: не удалось запустить новый процесс nfqws: %s", err)
-				return
+	scopesNames := genScopesNames()
+	ctx, cancel := context.WithCancel(context.Background())
+	// Ожидается, что zapretThreads > 0
+	// Горутина спавнит горутины-тестеры, ожидающе осовобождения nfqws процесса
+	// Ожидать одновременно могут до (maxThreads - cfg.zapretThreads) горутин
+	// Тестеры будут заменять выполнившиеся, не меняя имени
+	// Завершается по сигналу ctx.Done или после завершения всех горутин
+	go func() {
+		// TODO: минимально рабочий вариант, улучшить
+		// TODO: разбить на функции, упростить код
+		// var CGwg sync.WaitGroup
+		var wgCounter int32
+		var mu sync.Mutex
+		defer func() {
+			var counter int32
+			for {
+				select {
+				case <-ctx.Done():
+					// Все процессы к которым привязаны горутины будут уничтоены на уровне ос, в канал отправится пустой результат
+					osutil.KillCGroup(osutil.CGroupLynxSystemdPath, cgroupSliceName)
+					close(resultCh)
+					return
+				default:
+					counter = atomic.LoadInt32(&wgCounter)
+					if counter == 0 {
+						close(resultCh)
+						return
+					}
+				}
 			}
-			// Создаем cgroup
-			// -with-file - запускаем только после генерации таблицы
-			tester.Cgroup = osutil.NewCGroupScope(cgroupSliceName, scopesNames[q],
-				cfg.testerBin, "-file", unDomainsFile, "-with-file", readyFilePath, "-file-timeout", "20")
-			if tester.Cgroup.Err != nil {
-				fatal(ExitGeneralError, "Ошибка: не удалось запустить процесс tester в cgroup: %s",
-					tester.Cgroup.Err)
-				return
-			}
-			fmt.Printf("Cgroup создана, tester: \n%v\n%v\n", tester.Cgroup.Slice, tester.Req.Args)
-			resultCh <- tester
 		}()
-	}
-	// В случае остановки программы все процессы останавливаются, слайс удаляется
-	defer osutil.KillCGroup(osutil.CGroupLynxSystemdPath, cgroupSliceName)
-	defer fmt.Println("Остановка cgroup")
+		defer fmt.Println("Жду сигнала остановки или завершения горутин")
 
+		qnums := genQnums()
+		nfqwsInstanses := make(chan struct{}, cfg.zapretThreads) // Семафор
+		for _, str := range stratsAll {
+			// fmt.Printf("Итерация горутины:\n\tq=%v, strat=%v\n", q, str)
+			select {
+			case <-ctx.Done():
+				fmt.Println("Горутина завершена по сигналу cancel")
+				return
+			default:
+				nfqwsInstanses <- struct{}{} // Если буфер семаформа свободен -> в слайсе есть свободные очереди
+				mu.Lock()
+				qnum := qnums[0]
+				qnums = qnums[1:]
+				mu.Unlock()
+
+				unDomainsFile := getUnDomainsFile(qnum) // Создаем разные файлы с доменами для каждого тестера
+				if unDomainsFile == "" {
+					fatal(ExitIO, "Ошибка: не удалось заполнить доменами временный файл в %s: %s", tmpDomainsDir, err)
+					return
+					// WARN: не имеет смысла!
+					// TODO:
+				}
+
+				strPath := filepath.Join(cfg.stratsDir, str.Name())
+				tester := Tester{Req: nfqws.Req{Queue: qnum, Args: strPath}}
+
+				// CGwg.Add(1)
+				atomic.AddInt32(&wgCounter, 1)
+				go func(qnum int) {
+					// defer CGwg.Done()
+					defer func() {
+						mu.Lock()
+						qnums = append(qnums, qnum)
+						mu.Unlock()
+						atomic.AddInt32(&wgCounter, -1)
+						<-nfqwsInstanses
+					}()
+					// Запрашиваем у manager запуск nfqws, ждем результат
+					nfqwsReqCh <- tester.Req
+					if err := <-nfqwsErrCh; err != nil {
+						fatal(ExitGeneralError, "Ошибка: не удалось запустить новый процесс nfqws: %s", err)
+						return
+					}
+					// -with-file - запускаем только после генерации таблицы
+					fmt.Printf("Итерация горутины: запускаю tester\n")
+					tester.Cgroup = osutil.NewCGroupScope(cgroupSliceName, scopesNames[qnum-startQueueNum],
+						cfg.testerBin, "-file", unDomainsFile, "-with-file", readyFilePath, "-file-timeout", "20")
+					// Для всех игнорируем ошибки
+					// они пеехватятся в nftables или в <-ResChan
+					fmt.Printf("Cgroup завершена, tester: \nSLICE: %v, %v\nSTRAT: %v\n ERR: %v\n",
+						tester.Cgroup.Slice, tester.Cgroup.Unit, tester.Req.Args, tester.Cgroup.Err)
+					resultCh <- tester
+				}(qnum)
+			}
+		}
+	}()
+	defer func() { cancel() }()
+	// TODO: удаление временных файлов
+
+	fmt.Println("Применяю шаблон nftables")
 	err = firewall.NftablesApply(nftTablePattern)
 	if err != nil {
 		fatal(ExitGeneralError, "Ошибка: не удалось применить шаблон nftables: %s\n", err)
@@ -224,11 +272,6 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Res: %v\n", string(result))
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
 
 	for t := range resultCh {
 		fmt.Println(string(t.Cgroup.Out))
@@ -359,4 +402,21 @@ func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
 		}
 		return fPath
 	}, nil
+}
+
+func genScopesNames() []string {
+	names := make([]string, 0, cfg.zapretThreads)
+	for q := range cfg.zapretThreads {
+		name := fmt.Sprintf(cgroupScopeName, q+startQueueNum)
+		names = append(names, name)
+	}
+	return names
+}
+
+func genQnums() []int {
+	slice := make([]int, 0, cfg.zapretThreads)
+	for q := range cfg.zapretThreads {
+		slice = append(slice, startQueueNum+q)
+	}
+	return slice
 }
