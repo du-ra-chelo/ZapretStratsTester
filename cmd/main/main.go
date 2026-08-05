@@ -385,7 +385,7 @@ func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
 		// Создаем файл
 		fName := fmt.Sprintf(fFmt, fargs...)
 		fPath := filepath.Join(dir, fName)
-		f, err := os.OpenFile(fPath, os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(fPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
 			return ""
 		}
