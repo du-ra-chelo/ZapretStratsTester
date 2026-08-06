@@ -1,12 +1,15 @@
 package main
 
 import (
-	"flag"
+	"github.com/spf13/pflag"
 )
 
 const (
-	defaultPathTester = "./tester"
-	defaultPathZapret = "/opt/zapret"
+	defaultPathTester  = "./tester"
+	defaultPathZapret  = "/opt/zapret"
+	defaultStratsDir   = defaultPathZapret + "/zapret.cfgs/configurations"
+	defaultDomainsFile = "./domains.txt"
+	defaultWanIface    = "wlan0"
 )
 
 var cfg Config
@@ -27,50 +30,43 @@ type Config struct {
 	wanIface string
 }
 
-// Реализация flag.Value
-type stringValue string
-
-func (s *stringValue) String() string { return string(*s) }
-func (s *stringValue) Set(v string) error {
-	*s = stringValue(v)
-	return nil
-}
-
 func init() {
-	domainsFile := flag.String("domains", "./domains.txt", "Список доменов для проверки")
-	stratsDir := flag.String("strats", "/opt/zapret/zapret.cfgs/configurations", "Путь к папке со стратегиями zapret")
+	var domainsFile string
+	pflag.StringVarP(&domainsFile, "domains", "d", defaultDomainsFile, "Список доменов для проверки")
 
 	// Возможность использовать сторонние tester?
 	// На данный момент поддерживается только areAvailable
-	var testerBin stringValue = defaultPathTester
-	flag.Var(&testerBin, "tester", "Путь к программe проверки доступности (default "+defaultPathTester+")")
-	flag.Var(&testerBin, "t", "Путь к программe проверки доступности (default "+defaultPathTester+")")
-	testerThreads := flag.Int("tester-threads", 0, "Кол-во одновременных потоков опроса программы проверки. 0 - авто")
-	testerNetTimeout := flag.Int("tester-timeout", 0, "Время ожидания ответа домена. 0 - авто")
-	testerRetries := flag.Int("tester-retries", 0, "Кол-во повторных запросов к домену. 0 - авто")
-	testerRetryDelay := flag.Int("tester-retry-delay", 0, "Задержка между повторными запросами, растет с номером попытки. 0 - авто")
+	var testerBin string
+	pflag.StringVarP(&testerBin, "tester", "t", defaultPathTester, "Путь к программe проверки доступности")
+	testerThreads := pflag.Int("tester-threads", 0, "Кол-во одновременных потоков опроса программы проверки. 0 - авто")
+	testerNetTimeout := pflag.Int("tester-timeout", 0, "Время ожидания ответа домена. 0 - авто")
+	testerRetries := pflag.Int("tester-retries", 0, "Кол-во повторных запросов к домену. 0 - авто")
+	testerRetryDelay := pflag.Int("tester-retry-delay", 0, "Задержка между повторными запросами, растет с номером попытки. 0 - авто")
 
-	var zapretFolder stringValue = defaultPathZapret
-	flag.Var(&zapretFolder, "zapret", "Путь к папке zapret (default "+defaultPathZapret+")")
-	flag.Var(&zapretFolder, "z", "Путь к папке zapret (default "+defaultPathZapret+")")
+	var zapretFolder string
+	pflag.StringVarP(&zapretFolder, "zapret", "z", defaultPathZapret, "Путь к папке zapret")
 	// TODO: авто установка кол-ва потоков
 	// TODO: валидация флагов
-	zapretThreads := flag.Int("zapret-threads", 3, "Кол-во одновременно запущенных экземпляров zapret")
+	// TODO: автоопределение кол-ва потоков zapret. Кол-ва потоков tester?
+	zapretThreads := pflag.Int("zapret-threads", 3, "Кол-во одновременно запущенных экземпляров zapret")
 
-	wanIface := flag.String("wan", "wlan0", "Имя wan интерфейса для выхода в интернет")
-	flag.Parse()
+	var stratsDir string
+	pflag.StringVarP(&stratsDir, "strats", "s", defaultStratsDir, "Путь к папке со стратегиями zapret")
+
+	wanIface := pflag.String("wan", defaultWanIface, "Имя wan интерфейса для выхода в интернет")
+	pflag.Parse()
 
 	cfg = Config{
-		domainsFile: *domainsFile,
-		stratsDir:   *stratsDir,
+		domainsFile: domainsFile,
+		stratsDir:   stratsDir,
 
-		testerBin:        testerBin.String(),
+		testerBin:        testerBin,
 		testerThreads:    *testerThreads,
 		testerNetTimeout: *testerNetTimeout,
 		testerRetries:    *testerRetries,
 		testerRetryDelay: *testerRetryDelay,
 
-		zapretFolder:  zapretFolder.String(),
+		zapretFolder:  zapretFolder,
 		zapretThreads: *zapretThreads,
 
 		wanIface: *wanIface,
