@@ -36,7 +36,7 @@ func KillCGroup(cgroupHome, sliceName string) error {
 
 	// Проверяем существование
 	if _, err := os.Stat(slicePath); err != nil {
-		return fmt.Errorf("cgroup не существует: %w", err)
+		return nil
 	}
 
 	// Записываем "1" в cgroup.kill (только запись)
