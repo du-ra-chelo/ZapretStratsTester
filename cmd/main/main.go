@@ -18,6 +18,7 @@ import (
 	"ZapretStratsTester/internal/firewall"
 	"ZapretStratsTester/internal/nfqws"
 	"ZapretStratsTester/internal/osutil"
+	"ZapretStratsTester/internal/recover"
 )
 
 const (
@@ -41,54 +42,48 @@ const (
 	ExitDependency
 )
 
-var OsExit = ExitSuccess
+var (
+	Recoverer = recover.NewRecoverer()
+	OsExit    = ExitSuccess
+)
 
 const PanicSIGINT = "SIGINT"
 
 func main() {
-	// defer для установки кода завершения.
-	// Вместо log.Fatal используется fatal() - обертка над fmt.Fprintf(os.Stderr, ...) + установка osExit
-	defer func() {
-		os.Exit(OsExit)
-	}()
+	// Выполняется только при удачном завершении программы.
+	// В ином случае Fatal вызывает эту функцию
+	defer ProgramEnd()
 
 	// TODO: перехват SIGINT
 
 	// Проверка прав пользователя
 	if os.Geteuid() != 0 {
-		fatal(ExitPermission, "Ошибка: требуется запуск с правами root")
-		return
+		Fatal(ExitPermission, "Ошибка: требуется запуск с правами root")
 	}
 	// Наличие зависимостей: zapret, tester, nftables|iptables
 	if err := checkDeps(); err != nil {
-		fatal(ExitDependency, "Ошибка: не обнаружены необходимые зависимости: %s\n", err)
-		return
+		Fatal(ExitDependency, "Ошибка: не обнаружены необходимые зависимости: %s\n", err)
 	}
 	// Пробуем завершить системный Zapret, если тот запущен
 	if active, err := osutil.IsServiceActive("zapret"); err != nil {
 		// Серивис не существует или непредвиденная ошибка systemctl
-		fatal(ExitGeneralError, "Ошибка: не удалось проверить статус zapret.service: %s\n", err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: не удалось проверить статус zapret.service: %s\n", err)
 	} else if active {
 		if err := osutil.Systemctl("stop", "zapret"); err != nil { // Пробуем остановить
-			fatal(ExitGeneralError, "Ошибка: не удалось завершить zapret.service: %s\n", err)
-			return
+			Fatal(ExitGeneralError, "Ошибка: не удалось завершить zapret.service: %s\n", err)
 		}
-		defer osutil.Systemctl("start", "zapret") // По окончании работы восстанавливаем состояние
-		defer fmt.Println("Запуск запрета")
+		// Отложенный запуск
+		Recoverer.Add(func() error { return osutil.Systemctl("start", "zapret") })
 	}
 
 	// Сохраняем таблицу nft во временный файл
 	// TODO: iptables
 	if err := firewall.NftablesSave(); err != nil {
-		fatal(ExitGeneralError, "Ошибка: нe удалось создать бэкап таблицы: %s\n", err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: нe удалось создать бэкап таблицы: %s\n", err)
 	}
-	defer firewall.NftablesRecover() // Таблица восстановится ДО перезапуска zapret
-	defer fmt.Println("Восстановление nftables")
+	Recoverer.Add(firewall.NftablesRecover)
 	if err := firewall.NftablesClear(); err != nil {
-		fatal(ExitGeneralError, "Ошибка: не удалось очистить правила: %s", err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: не удалось очистить правила: %s", err)
 	}
 
 	// Запускаем testers и nfqws procs
@@ -100,8 +95,7 @@ func main() {
 
 	stratsAll, err := os.ReadDir(cfg.stratsDir)
 	if err != nil {
-		fatal(ExitGeneralError, "Ошибка: не удалось прочитать стратегии из директории %s: %s\n", cfg.stratsDir, err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: не удалось прочитать стратегии из директории %s: %s\n", cfg.stratsDir, err)
 	}
 
 	resultCh := make(chan Tester, len(stratsAll))
@@ -111,7 +105,7 @@ func main() {
 	nfqwsPath := getNfqwsBinPath()
 	manager := nfqws.NewManager(nfqwsPath, nfqwsReqCh, nfqwsErrCh)
 	manager.Start()
-	defer func() {
+	Recoverer.Add(func() error {
 		// Выводим ошибки завершения nfqws.Manager
 		go func() {
 			for err := range nfqwsErrCh {
@@ -121,13 +115,12 @@ func main() {
 			}
 		}()
 		manager.Stop()
-	}()
-	defer fmt.Println("Остановка manager")
+		return nil
+	}) // TODO: не соответствует логике Recoverer
 
 	getUnDomainsFile, err := uniqueFileGen(tmpDomainsDir, tmpDomainsName)
 	if err != nil {
-		fatal(ExitIO, "Ошибка при открытии/чтении файла с доменами: %s", err)
-		return
+		Fatal(ExitIO, "Ошибка при открытии/чтении файла с доменами: %s", err)
 	}
 
 	scopesNames := genScopesNames()
@@ -137,6 +130,9 @@ func main() {
 	// Ожидать одновременно могут до (maxThreads - cfg.zapretThreads) горутин
 	// Тестеры будут заменять выполнившиеся, не меняя имени
 	// Завершается по сигналу ctx.Done или после завершения всех горутин
+	//
+	// Если хоть один тестер вернет ошибку - убиваем всех.
+	Recoverer.Add(func() error { return osutil.KillCGroup(osutil.CGroupLynxSystemdPath, cgroupSliceName) })
 	go func() {
 		// TODO: минимально рабочий вариант, улучшить
 		// TODO: разбить на функции, упростить код
@@ -180,10 +176,7 @@ func main() {
 
 				unDomainsFile := getUnDomainsFile(qnum) // Создаем разные файлы с доменами для каждого тестера
 				if unDomainsFile == "" {
-					fatal(ExitIO, "Ошибка: не удалось заполнить доменами временный файл в %s: %s", tmpDomainsDir, err)
-					return
-					// WARN: не имеет смысла!
-					// TODO:
+					Fatal(ExitIO, "Ошибка: не удалось заполнить доменами временный файл в %s: %s", tmpDomainsDir, err)
 				}
 
 				strPath := filepath.Join(cfg.stratsDir, str.Name())
@@ -203,8 +196,7 @@ func main() {
 					// Запрашиваем у manager запуск nfqws, ждем результат
 					nfqwsReqCh <- tester.Req
 					if err := <-nfqwsErrCh; err != nil {
-						fatal(ExitGeneralError, "Ошибка: не удалось запустить новый процесс nfqws: %s", err)
-						return
+						Fatal(ExitGeneralError, "Ошибка: не удалось запустить новый процесс nfqws: %s", err)
 					}
 					// -with-file - запускаем только после генерации таблицы
 					fmt.Printf("Итерация горутины: запускаю tester\n")
@@ -219,14 +211,16 @@ func main() {
 			}
 		}
 	}()
-	defer func() { cancel() }()
+	Recoverer.Add(func() error {
+		cancel()
+		return nil
+	}) // TODO: не соответствует логике Recoverer
+
 	// TODO: удаление временных файлов
 
-	fmt.Println("Применяю шаблон nftables")
 	err = firewall.NftablesApply(nftTablePattern)
 	if err != nil {
-		fatal(ExitGeneralError, "Ошибка: не удалось применить шаблон nftables: %s\n", err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: не удалось применить шаблон nftables: %s\n", err)
 	}
 	// Ждем создания всех cgroup
 	// TODO: горутины для всех процессов
@@ -236,18 +230,15 @@ func main() {
 		lastScopePath := filepath.Join(osutil.CGroupLynxSystemdPath, lastScope)
 		for range 60 { // 5 сек
 			if err := osutil.IsFileExist(lastScopePath, ""); err == nil {
-				fmt.Println("Последний тестер создан")
 				break
 			}
 			time.Sleep(1 * time.Second)
-			fmt.Println("Жду создания тестера: ", lastScopePath)
 		}
 	}()
 	// Дополняем таблицу правилами перенаправления трафика
 	err = nftableGenRules(scopesNames)
 	if err != nil {
-		fatal(ExitGeneralError, "Ошибка: не удалось установить временные правила: %s\n", err)
-		return
+		Fatal(ExitGeneralError, "Ошибка: не удалось установить временные правила: %s\n", err)
 	}
 	// TEST
 	// nft
@@ -279,10 +270,19 @@ func main() {
 	}
 }
 
-// fatal выводит форматированное сообщение в stderr и устанавливает код ошибки
-func fatal(exitCode int, msg string, args ...any) {
+// ProgramEnd выполняет все отложенные в Recoverer функции, устанавлиавет код выхода == OsExit
+func ProgramEnd() {
+	if err := Recoverer.RecoverAll(); err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка при восстановлении системы: %v", err)
+	}
+	os.Exit(OsExit)
+}
+
+// Fatal выводит форматированное сообщение в stderr и устанавливает код ошибки
+func Fatal(exitCode int, msg string, args ...any) {
 	fmt.Fprintf(os.Stderr, msg, args...)
 	OsExit = exitCode
+	ProgramEnd()
 }
 
 // checkDeps проверяет наличие необходимых файлов и программ в системе:
