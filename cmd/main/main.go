@@ -112,6 +112,7 @@ func main() {
 	manager := nfqws.NewManager(nfqwsPath, nfqwsReqCh, nfqwsErrCh)
 	manager.Start()
 	defer func() {
+		// Выводим ошибки завершения nfqws.Manager
 		go func() {
 			for err := range nfqwsErrCh {
 				if err != nil {
@@ -233,7 +234,7 @@ func main() {
 		lastScope := fmt.Sprintf(scopePathPattern,
 			cgroupSliceName, scopesNames[len(scopesNames)-1]) // Длина не меньше 1
 		lastScopePath := filepath.Join(osutil.CGroupLynxSystemdPath, lastScope)
-		for range 6 { // 5 сек
+		for range 60 { // 5 сек
 			if err := osutil.IsFileExist(lastScopePath, ""); err == nil {
 				fmt.Println("Последний тестер создан")
 				break
@@ -278,12 +279,14 @@ func main() {
 	}
 }
 
+// fatal выводит форматированное сообщение в stderr и устанавливает код ошибки
 func fatal(exitCode int, msg string, args ...any) {
 	fmt.Fprintf(os.Stderr, msg, args...)
 	OsExit = exitCode
 }
 
-// checkDeps проверяет наличие необходимых файлов и программ в системе
+// checkDeps проверяет наличие необходимых файлов и программ в системе:
+// zappret, tester, nftables
 func checkDeps() error {
 	// TODO: дополнить проверку необходимых программ
 	// Проверяем наличие zapret1 в сиситеме
@@ -344,12 +347,14 @@ func nftableGenRules(scopesNames []string) error {
 	return nil
 }
 
+// getNfqwsBinPath возврашает путь к бинарнику nfqws в зависимости от системы. Заглушка
 func getNfqwsBinPath() string {
 	// TODO: автоопределение бинарника для каждой платформы
 	return filepath.Join(cfg.zapretFolder, "binaries/linux-x86_64/nfqws")
 }
 
-// uniqueFileGen - через замыкание возвращает функцию, которая созает файл с названием требуемого формата в переданной дирректории.
+// uniqueFileGen возвращает функцию, которая принимает аргументы форматирования и
+// созает файл с названием в требуемом формате в переданной родительской функции директории.
 // Созданные файлы содержат одинаковые данные из cfg.domainsFile, но в разном порядке
 func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
 	domainsList, err := os.Open(cfg.domainsFile)
@@ -404,6 +409,8 @@ func uniqueFileGen(dir, fFmt string) (func(...any) string, error) {
 	}, nil
 }
 
+// genScopesNames на основе кол-ва потоков zapret генерирует слайс-список названий cgroup.
+// В случае, когда cfg.zapretThreads < 1, вернет пустой слайс
 func genScopesNames() []string {
 	names := make([]string, 0, cfg.zapretThreads)
 	for q := range cfg.zapretThreads {
@@ -413,6 +420,8 @@ func genScopesNames() []string {
 	return names
 }
 
+// genQnums на основе кол-ва потоков zapret генерирует слайс-список значений qnum.
+// В случае, когда cfg.zapretThreads < 1, вернет пустой слайс
 func genQnums() []int {
 	slice := make([]int, 0, cfg.zapretThreads)
 	for q := range cfg.zapretThreads {
